@@ -20,13 +20,19 @@
   <body>
   <div class="container">
   <h1>{{.Match.ShortName}} - {{ .MatchLogs.TeamId}}({{.MatchLogs.AllianceStation}}) Log </h1>
-  <ul id="matchTabs" class="nav nav-tabs" style="margin-bottom: 15px;">
-  {{range $logs := .MatchLogs.Logs}}
-    <li{{if eq $logs.StartTime $.FirstMatch }} class="active"{{end}}>
-      <a href="#{{$logs.StartTime}}" data-toggle="tab">{{$logs.StartTime}}</a>
-    </li>
-  {{end}}
-  </ul>
+  <div id="pageNav">
+    <ul id="matchTabs" class="nav nav-tabs" style="margin-bottom: 15px;">
+    {{range $logs := .MatchLogs.Logs}}
+      <li{{if eq $logs.StartTime $.FirstMatch }} class="active"{{end}}>
+        <a href="#{{$logs.StartTime}}" data-toggle="tab">{{$logs.StartTime}}</a>
+      </li>
+    {{end}}
+    </ul>
+    <ul class="nav navbar-right" id="navButtons">
+      <li><button id="previousChange"><i class="arrow up"></i></button></li>
+      <li><button id="nextChange"><i class="arrow down"></i></button></li>
+    </ul>
+  </div>
   <div class="tab-content">
     {{range $logs := .MatchLogs.Logs}}
       <div class="tab-pane {{if eq $.FirstMatch $logs.StartTime}} active{{end}}" id="{{$logs.StartTime}}">
@@ -50,11 +56,23 @@
           </thead>
           <tbody>
             {{range $row := $logs.Rows}}
-              <tr>
+              <tr id="{{$row.Bookmark}}" data-status="{{and $row.DsLinked $row.RadioLinked $row.RobotLinked}}">
                 <td data-status-ok="{{and $row.DsLinked $row.RadioLinked $row.RobotLinked}}">{{printf "%.2f" $row.MatchTimeSec}}</td>
                 <td>{{$row.DsLinked}}</td>
-                <td>{{if $row.DsLinked}}{{$row.RadioLinked}}{{else}}*****{{end}}</td>
-                <td>{{if and $row.DsLinked $row.RadioLinked}}{{$row.RobotLinked}}{{else}}*****{{end}}</td>
+                <td>{{if $row.DsLinked}}
+                      {{if not $row.RadioLinked}}
+                        {{printf "%.1f" $row.RadioDisconnectDuration}}
+                      {{else}}
+                        {{$row.RadioLinked}}
+                      {{end}}
+                    {{else}}*****{{end}}</td>
+                <td>{{if and $row.DsLinked $row.RadioLinked}}
+                      {{if not $row.RobotLinked}}
+                        {{printf "%.1f" $row.RobotDisconnectDuration}}
+                      {{else}}
+                        {{$row.RobotLinked}}
+                      {{end}}
+                    {{else}}*****{{end}}</td>
                 <td>{{if $row.Auto}}Auto{{else}}Telop{{end}}</td>
                 <td>{{$row.Enabled}}</td>
                 <td>{{$row.EmergencyStop}}</td>
@@ -80,4 +98,40 @@
 <script src="/static/js/lib/moment.min.js"></script>
 <script src="/static/js/lib/bootstrap-datetimepicker.min.js"></script>
 <script src="/static/js/lib/handlebars-1.3.0.js"></script>
+<script type="application/javascript">
+  var bookmark = -1;
+  var activeTable;
+  var yOffset = -150;
+  function scrollToNextChange(){
+    activeTable = $('.tab-pane.active table tbody');
+    if($(activeTable).children('tr#' + $('li.active a').text() + '-' + (bookmark + 1)).length > 0) {
+      bookmark++
+    }
+    currentRow = $(activeTable).children('tr#' + $('li.active a').text() + '-' + bookmark);
+    if(currentRow.length >0){
+      var y = $(currentRow)[0].getBoundingClientRect().top + window.pageYOffset - 150
+      window.scrollTo({top:y, behavior:'smooth'});
+    }    
+  }
+
+  function scrollToPrevChange(){    
+    activeTable = $('.tab-pane.active table tbody');
+    if($(activeTable).children('tr#' + $('li.active a').text() + '-' + (bookmark - 1)).length > 0) {
+      bookmark--;
+      currentRow = $(activeTable).children('tr#' + $('li.active a').text() + '-' + bookmark);
+      if(currentRow.length > 0) {
+        var y = $(currentRow)[0].getBoundingClientRect().top + window.pageYOffset - 150
+        window.scrollTo({top:y, behavior:'smooth'});
+      }
+    } else {
+      bookmark=-1;
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+  }
+  $(document).ready(function (){
+
+    $('#nextChange').on('click', scrollToNextChange);
+    $('#previousChange').on('click', scrollToPrevChange);
+  });
+</script>
 {{end}}

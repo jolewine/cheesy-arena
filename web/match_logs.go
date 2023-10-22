@@ -28,22 +28,25 @@ type MatchLogsListItem struct {
 }
 
 type MatchLogRow struct {
-	MatchTimeSec      float64
-	PacketType        int
-	TeamId            int
-	AllianceStation   string
-	DsLinked          bool
-	RadioLinked       bool
-	RobotLinked       bool
-	Auto              bool
-	Enabled           bool
-	EmergencyStop     bool
-	BatteryVoltage    float64
-	MissedPacketCount int
-	DsRobotTripTimeMs int
-	TxRate            float64
-	RxRate            float64
-	SignalNoiseRatio  int
+	MatchTimeSec            float64
+	PacketType              int
+	TeamId                  int
+	AllianceStation         string
+	DsLinked                bool
+	RadioLinked             bool
+	RobotLinked             bool
+	Auto                    bool
+	Enabled                 bool
+	EmergencyStop           bool
+	BatteryVoltage          float64
+	MissedPacketCount       int
+	DsRobotTripTimeMs       int
+	TxRate                  float64
+	RxRate                  float64
+	SignalNoiseRatio        int
+	RadioDisconnectDuration float64
+	RobotDisconnectDuration float64
+	Bookmark                string
 }
 
 type MatchLog struct {
@@ -175,6 +178,11 @@ func (web *Web) getMatchLogFromRequest(r *http.Request) (*model.Match, *MatchLog
 	}
 
 	for _, v := range files {
+		bookmark := 0
+		lastDsTime := 0.0
+		radioDisconnectTime := 0.0
+		robotDisconnectTime := 0.0
+		lastStatus := true
 		f, _ := os.Open(v)
 		defer f.Close()
 		// Create a new reader.
@@ -194,7 +202,8 @@ func (web *Web) getMatchLogFromRequest(r *http.Request) (*model.Match, *MatchLog
 			Rows:      make([]MatchLogRow, len(records)),
 		}
 		for i, record := range records {
-			var curRow MatchLogRow
+			//var curRow MatchLogRow
+			curRow := &curlog.Rows[i]
 			curRow.MatchTimeSec, _ = strconv.ParseFloat(record[headerMap["matchTimeSec"]], 64)
 			curRow.PacketType, _ = strconv.Atoi(record[headerMap["packetType"]])
 			curRow.TeamId, _ = strconv.Atoi(record[headerMap["teamId"]])
@@ -219,8 +228,40 @@ func (web *Web) getMatchLogFromRequest(r *http.Request) (*model.Match, *MatchLog
 				curRow.SignalNoiseRatio = -1
 			}
 
+			currentStatus := curRow.DsLinked && curRow.RadioLinked && curRow.RobotLinked
+			if curRow.MatchTimeSec-lastDsTime > 2 {
+				curlog.Rows[i-1].DsLinked = false
+				lastStatus = false
+			}
+
+			if !curRow.RadioLinked {
+				if radioDisconnectTime > 0 {
+					curRow.RadioDisconnectDuration = curRow.MatchTimeSec - radioDisconnectTime
+				} else {
+					radioDisconnectTime = curRow.MatchTimeSec
+				}
+			} else {
+				radioDisconnectTime = 0.0
+			}
+
+			if !curRow.RobotLinked {
+				if robotDisconnectTime > 0 {
+					curRow.RobotDisconnectDuration = curRow.MatchTimeSec - robotDisconnectTime
+				} else {
+					robotDisconnectTime = curRow.MatchTimeSec
+				}
+			} else {
+				robotDisconnectTime = 0.0
+			}
+
+			if lastStatus != currentStatus {
+				curRow.Bookmark = curlog.StartTime + "-" + strconv.Itoa(bookmark)
+				lastStatus = currentStatus
+				bookmark++
+			}
+			lastDsTime = curRow.MatchTimeSec
 			// Create new person and add to persons array
-			curlog.Rows[i] = curRow
+			//curlog.Rows[i] = curRow
 		}
 
 		logs.Logs = append(logs.Logs, curlog)
